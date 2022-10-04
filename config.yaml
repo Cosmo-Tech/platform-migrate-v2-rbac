@@ -1,0 +1,5 @@
+platform:
+  url: https://dev.api.cosmotech.com/v2
+  scope: http://dev.api.cosmotech.com
+mapping:
+  3a869905-e9f5-4851-a7a9-3079aad49dff: "vincent.carluer@cosmotech.com"
