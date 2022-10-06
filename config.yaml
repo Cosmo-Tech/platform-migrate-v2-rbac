@@ -1,3 +1,6 @@
+azure:
+  user: vincent.carluer@cosmotech.com
+  tenant: cosmotech.com
 platform:
   url: https://dev.api.cosmotech.com/v2
   scope: http://dev.api.cosmotech.com

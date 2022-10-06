@@ -12,9 +12,12 @@ from cosmotech_api.model.organization import Organization
 from cosmotech_api.model.workspace import Workspace
 from cosmotech_api.model.scenario import Scenario
 from dataclasses import dataclass
+from azure.graphrbac import GraphRbacManagementClient
+from azure.common.credentials import UserPassCredentials
 import logging
 import sys
 import yaml
+import getpass
 
 logger = logging.getLogger()
 fileHandler = logging.FileHandler("application.log")
@@ -28,6 +31,22 @@ logger.addHandler(streamHandler)
 logger.addHandler(fileHandler)
 logger.setLevel(logging.INFO)
 TRACE_DOCUMENTS = False
+
+
+def get_graphclient(config_file):
+    logger.debug("logging in for graph API")
+    print()
+    credentials = UserPassCredentials(
+               config_file['azure']['user'],
+               getpass.getpass(prompt='Please enter Azure account password: '),
+               resource="https://graph.windows.net"
+       )
+    tenant_id = config_file['azure']['tenant']
+    graphrbac_client = GraphRbacManagementClient(
+       credentials,
+       tenant_id
+    )
+    return graphrbac_client
 
 
 def get_apiclient(config_file):
@@ -138,9 +157,10 @@ def get_config():
         return yaml.safe_load(config_file)
 
 
-def build_config(api_client, config_file):
+def build_config(api_client, graph_client, config_file):
     return Config(
             api_client=api_client,
+            graph_client=graph_client,
             config_file=config_file
             )
 
@@ -150,13 +170,18 @@ def migrate():
     logging.info("Migration start")
     config_file = get_config()
     with get_apiclient(config_file) as api_client:
-        config = build_config(api_client, config_file)
+        graph_client = get_graphclient(config_file)
+        config = build_config(
+                api_client,
+                graph_client,
+                config_file)
         migrate_organizations(config)
 
 
 @dataclass
 class Config(object):
     api_client: str
+    graph_client: str
     config_file: str
 
 
