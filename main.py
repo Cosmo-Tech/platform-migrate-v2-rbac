@@ -34,19 +34,27 @@ TRACE_DOCUMENTS = False
 
 
 def get_graphclient(config_file):
-    logger.debug("logging in for graph API")
-    print()
-    credentials = UserPassCredentials(
-               config_file['azure']['user'],
-               getpass.getpass(prompt='Please enter Azure account password: '),
-               resource="https://graph.windows.net"
-       )
-    tenant_id = config_file['azure']['tenant']
-    graphrbac_client = GraphRbacManagementClient(
-       credentials,
-       tenant_id
-    )
-    return graphrbac_client
+    if config_file['options']['fetch_from_azure_ad'] == 'true':
+        logger.info("logging in for graph API")
+        print()
+        credentials = UserPassCredentials(
+                   config_file['azure']['user'],
+                   getpass.getpass(
+                       prompt='Please enter Azure account password: '
+                       ),
+                   resource="https://graph.windows.net"
+           )
+        tenant_id = config_file['azure']['tenant']
+        graphrbac_client = GraphRbacManagementClient(
+           credentials,
+           tenant_id
+        )
+        return graphrbac_client
+    else:
+        logger.info(
+                "Option to fetch users from Azure AD is disabled in config"
+                )
+        return None
 
 
 def get_apiclient(config_file):
@@ -141,6 +149,7 @@ def migrate_scenarios(config, context):
                     f"{context.scenario.name} - " +
                     f"{context.scenario.owner_id}"
                     )
+            get_mail(config, context.scenario.owner_id)
             scenariosOwners.append(context.scenario.owner_id)
         logger.info(f"Owners: {scenariosOwners}")
         return scenariosOwners
@@ -152,16 +161,46 @@ def migrate_scenarios(config, context):
                 )
 
 
+def get_mail(config, oid):
+    if oid not in config.mapping:
+        if config.config_file['options']['fetch_from_azure_ad'] == 'true':
+            user = config.graph_client.users.get(oid)
+            logger.debug("New user info fetch:")
+            logger.debug(user)
+            logger.info(f"Adding user {user.object_id} - " +
+                        f"{user.user_principal_name} - " +
+                        f"{user.display_name}")
+            config.mapping[user.object_id] = user.user_principal_name
+        else:
+            logger.info(f"User {oid} not found and Azure AD disabled")
+    logger.info(f"Getting user {oid} from mapping")
+    mail = config.mapping.get(oid)
+    if mail is None:
+        logger.debug(f"Cannot find user {oid} in mapping")
+        mail = config.config_file['options']['fallback_admin']
+        logger.info(f"Cannot find user {oid} in mapping. " +
+                    f"fallback admin to {mail}")
+
+    if not mail:
+        logger.error(f"Bad mail info provided for {oid}")
+    else:
+        logger.info(f"{oid}: Returning mail {mail}")
+
+
 def get_config():
     with open('config.yaml', 'r') as config_file:
         return yaml.safe_load(config_file)
 
 
 def build_config(api_client, graph_client, config_file):
+    mapping = {}
+    if config_file['mapping'] is not None:
+        mapping = config_file['mapping']
     return Config(
             api_client=api_client,
             graph_client=graph_client,
-            config_file=config_file
+            config_file=config_file,
+            mapping=mapping
             )
 
 
@@ -183,6 +222,7 @@ class Config(object):
     api_client: str
     graph_client: str
     config_file: str
+    mapping: dict
 
 
 class Context:
