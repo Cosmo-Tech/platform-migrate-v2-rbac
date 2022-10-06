@@ -14,6 +14,7 @@ from cosmotech_api.model.scenario import Scenario
 from dataclasses import dataclass
 from azure.graphrbac import GraphRbacManagementClient
 from azure.common.credentials import UserPassCredentials
+from azure.graphrbac.models import GraphErrorException
 import logging
 import sys
 import yaml
@@ -34,7 +35,7 @@ TRACE_DOCUMENTS = False
 
 
 def get_graphclient(config_file):
-    if config_file['options']['fetch_from_azure_ad'] == 'true':
+    if config_file['options']['fetch_from_azure_ad']:
         logger.info("logging in for graph API")
         print()
         credentials = UserPassCredentials(
@@ -162,18 +163,24 @@ def migrate_scenarios(config, context):
 
 
 def get_mail(config, oid):
+    logger.info(f"Getting user {oid} from mapping")
     if oid not in config.mapping:
-        if config.config_file['options']['fetch_from_azure_ad'] == 'true':
-            user = config.graph_client.users.get(oid)
-            logger.debug("New user info fetch:")
-            logger.debug(user)
-            logger.info(f"Adding user {user.object_id} - " +
-                        f"{user.user_principal_name} - " +
-                        f"{user.display_name}")
-            config.mapping[user.object_id] = user.user_principal_name
+        if config.config_file['options']['fetch_from_azure_ad']:
+            logger.info("User {oid} not found, searching in MS Graph")
+            try:
+                user = config.graph_client.users.get(oid)
+                logger.debug("New user info fetch:")
+                logger.debug(user)
+                logger.info("Adding user to mapping: " +
+                            f"{user.object_id} - " +
+                            f"{user.user_principal_name} - " +
+                            f"{user.display_name}")
+                config.mapping[user.object_id] = user.user_principal_name
+            except GraphErrorException as e:
+                logger.debug(f"Exception calling msgraph: {e}")
+                logger.info(f"{oid} does not exist in MS Graph")
         else:
             logger.info(f"User {oid} not found and Azure AD disabled")
-    logger.info(f"Getting user {oid} from mapping")
     mail = config.mapping.get(oid)
     if mail is None:
         logger.debug(f"Cannot find user {oid} in mapping")
