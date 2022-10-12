@@ -1,31 +1,31 @@
 # Copyright (c) Cosmo Tech.
 # Licensed under the MIT license.
 
-from azure.identity import DefaultAzureCredential
-import cosmotech_api
-from cosmotech_api import Configuration
-from cosmotech_api import ApiClient
-from cosmotech_api.api import organization_api
-from cosmotech_api.api import workspace_api
-from cosmotech_api.api import scenario_api
-from cosmotech_api.model.organization import Organization
-from cosmotech_api.model.workspace import Workspace
-from cosmotech_api.model.scenario import Scenario
-from dataclasses import dataclass
-from azure.graphrbac import GraphRbacManagementClient
-from azure.common.credentials import UserPassCredentials
-from azure.graphrbac.models import GraphErrorException
+import getpass
 import logging
 import sys
+from dataclasses import dataclass
+
+import cosmotech_api
 import yaml
-import getpass
+from azure.common.credentials import UserPassCredentials
+from azure.graphrbac import GraphRbacManagementClient
+from azure.graphrbac.models import GraphErrorException
+from azure.identity import DefaultAzureCredential
+from cosmotech_api import ApiClient
+from cosmotech_api import Configuration
+from cosmotech_api.api import organization_api
+from cosmotech_api.api import scenario_api
+from cosmotech_api.api import workspace_api
+from cosmotech_api.model.organization import Organization
+from cosmotech_api.model.scenario import Scenario
+from cosmotech_api.model.workspace import Workspace
 
 logger = logging.getLogger()
 fileHandler = logging.FileHandler("application.log")
 streamHandler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 streamHandler.setFormatter(formatter)
 fileHandler.setFormatter(formatter)
 logger.addHandler(streamHandler)
@@ -39,22 +39,15 @@ def get_graphclient(config_file):
         logger.info("logging in for graph API")
         print()
         credentials = UserPassCredentials(
-                   config_file['azure']['user'],
-                   getpass.getpass(
-                       prompt='Please enter Azure account password: '
-                       ),
-                   resource="https://graph.windows.net"
-           )
+            config_file['azure']['user'],
+            getpass.getpass(prompt='Please enter Azure account password: '),
+            resource="https://graph.windows.net")
         tenant_id = config_file['azure']['tenant']
-        graphrbac_client = GraphRbacManagementClient(
-           credentials,
-           tenant_id
-        )
+        graphrbac_client = GraphRbacManagementClient(credentials, tenant_id)
         return graphrbac_client
     else:
         logger.info(
-                "Option to fetch users from Azure AD is disabled in config"
-                )
+            "Option to fetch users from Azure AD is disabled in config")
         return None
 
 
@@ -67,11 +60,9 @@ def get_apiclient(config_file):
     logger.debug("Getting token")
     token = credential.get_token(scope)
 
-    configuration = Configuration(
-        host=host,
-        discard_unknown_keys=True,
-        access_token=token.token
-    )
+    configuration = Configuration(host=host,
+                                  discard_unknown_keys=True,
+                                  access_token=token.token)
 
     return ApiClient(configuration)
 
@@ -88,16 +79,12 @@ def migrate_organizations(config):
             context.organization = organization
             migrate_organization(config, context)
     except cosmotech_api.ApiException as e:
-        logger.error(
-                "Exception when calling " +
-                "organization_api->find_all_organizations: " +
-                f"{e}"
-                )
+        logger.error("Exception when calling " +
+                     "organization_api->find_all_organizations: " + f"{e}")
 
 
 def migrate_organization(config, context):
-    logger.info("Migrating organization: " +
-                f"{context.organization.id} - " +
+    logger.info("Migrating organization: " + f"{context.organization.id} - " +
                 f"{context.organization.name}")
     migrate_workspaces(config, context)
 
@@ -116,18 +103,13 @@ def migrate_workspaces(config, context):
             workspacesOwners.extend(workspaceOwners)
         return workspacesOwners
     except cosmotech_api.ApiException as e:
-        logger.error(
-                "Exception when calling " +
-                "workspace_api->find_all_workspaces: " +
-                f"{e}"
-                )
+        logger.error("Exception when calling " +
+                     "workspace_api->find_all_workspaces: " + f"{e}")
 
 
 def migrate_workspace(config, context):
-    logger.info("Migrating workspace: " +
-                f"{context.workspace.key} - " +
-                f"{context.workspace.id} - " +
-                f"{context.workspace.name}")
+    logger.info("Migrating workspace: " + f"{context.workspace.key} - " +
+                f"{context.workspace.id} - " + f"{context.workspace.name}")
     owners = migrate_scenarios(config, context)
     return owners
 
@@ -136,30 +118,24 @@ def migrate_scenarios(config, context):
     logger.info("Migrating scenarios")
     try:
         api_scenario = scenario_api.ScenarioApi(config.api_client)
-        scenarios = api_scenario.find_all_scenarios(
-                context.organization.id,
-                context.workspace.id)
+        scenarios = api_scenario.find_all_scenarios(context.organization.id,
+                                                    context.workspace.id)
         if TRACE_DOCUMENTS:
             logger.debug(scenarios)
         scenariosOwners = []
         for scenario in scenarios:
             context.scenario = scenario
-            logger.info(
-                    "Scenario: " +
-                    f"{context.scenario.id} - " +
-                    f"{context.scenario.name} - " +
-                    f"{context.scenario.owner_id}"
-                    )
+            logger.info("Scenario: " + f"{context.scenario.id} - " +
+                        f"{context.scenario.name} - " +
+                        f"{context.scenario.owner_id}")
             get_mail(config, context.scenario.owner_id)
+            # Add user mail as admin if no admin yet
             scenariosOwners.append(context.scenario.owner_id)
         logger.info(f"Owners: {scenariosOwners}")
         return scenariosOwners
     except cosmotech_api.ApiException as e:
-        logger.error(
-                "Exception when calling " +
-                "scenario_api->find_all_scenarios: " +
-                f"{e}"
-                )
+        logger.error("Exception when calling " +
+                     "scenario_api->find_all_scenarios: " + f"{e}")
 
 
 def get_mail(config, oid):
@@ -203,12 +179,10 @@ def build_config(api_client, graph_client, config_file):
     mapping = {}
     if config_file['mapping'] is not None:
         mapping = config_file['mapping']
-    return Config(
-            api_client=api_client,
-            graph_client=graph_client,
-            config_file=config_file,
-            mapping=mapping
-            )
+    return Config(api_client=api_client,
+                  graph_client=graph_client,
+                  config_file=config_file,
+                  mapping=mapping)
 
 
 def migrate():
@@ -217,10 +191,7 @@ def migrate():
     config_file = get_config()
     with get_apiclient(config_file) as api_client:
         graph_client = get_graphclient(config_file)
-        config = build_config(
-                api_client,
-                graph_client,
-                config_file)
+        config = build_config(api_client, graph_client, config_file)
         migrate_organizations(config)
 
 
