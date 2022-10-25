@@ -16,3 +16,9 @@ pipenv shell
 pipenv install
 python main.py
 ```
+
+## Report example format
+[RESOURCE];[ID];[OWNER_ID];[OWNER_MAIL];[USERS];[STATUS]
+organization;o-asfsdfdfds;13123123-31312-13123;admin@cosmotech.com;user1@cosmotech.com,user2@cosmotech.com;UPDATED
+workspace;w-asfsdfdfds;13123123-31312-13123;admin@cosmotech.com;user1@cosmotech.com,user2@cosmotech.com;EXIST
+scenario;s-asfsdfdfds;13123123-31312-13123;admin@cosmotech.com;user1@cosmotech.com,user2@cosmotech.com;UPDATED
