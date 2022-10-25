@@ -9,5 +9,6 @@ options:
   fallback_admin: [FALLBACK_MAIL]
 #   Uncomment the line below and define it if you have to migrate only one organization with id
 #  organizationId: o-k0re8koklp4g
-mapping:
-  [USER_OID]: "[MAPPED_USER_MAIL]"
+#   Uncomment the mapping to define oid->mail mapping manually
+# mapping:
+#   [USER_OID]: "[MAPPED_USER_MAIL]"

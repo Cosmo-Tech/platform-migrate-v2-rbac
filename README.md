@@ -12,5 +12,7 @@ Connect-AzAccount
 ## Run
 Copy and complete config.yaml.template to config.yaml.
 ``` bash
+pipenv shell
+pipenv install
 python main.py
 ```
