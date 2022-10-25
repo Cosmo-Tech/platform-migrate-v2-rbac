@@ -130,3 +130,6 @@ dmypy.json
 
 # Intellij
 .idea
+config.yaml
+rbac_migration_report.csv
+application.log

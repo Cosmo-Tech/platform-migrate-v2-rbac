@@ -1,5 +1,6 @@
 # Copyright (c) Cosmo Tech.
 # Licensed under the MIT license.
+import csv
 import getpass
 import logging
 import sys
@@ -19,6 +20,11 @@ from cosmotech_api.api import workspace_api
 from cosmotech_api.model.organization import Organization
 from cosmotech_api.model.scenario import Scenario
 from cosmotech_api.model.workspace import Workspace
+
+csv_file = open('rbac_migration_report.csv', 'w', encoding='UTF8')
+header_csv = ['RESOURCE', 'ID', 'OWNER_ID', 'OWNER_MAIL', 'STATUS', 'USERS']
+csv_writer = csv.writer(csv_file)
+csv_writer.writerow(header_csv)
 
 logger = logging.getLogger()
 fileHandler = logging.FileHandler("application.log")
@@ -159,9 +165,12 @@ def update_organization(config, context, users):
     organization = api_organization.update_organization(
         context.organization.id,
         context.organization)
-    if organization.security != context.organization.security:
-        logger.warning('Organization %s not updated because security ' +
-                       'already exists' % organization.id)
+    updated = organization.security == context.organization.security
+    csv_writer.writerow(['organization', organization.id, organization.owner_id,
+                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users)])
+    if not updated:
+        logger.warning('Organization %s not updated because security already exists'
+                       % organization.id)
 
 
 def update_workspace(config, context, users):
@@ -169,12 +178,15 @@ def update_workspace(config, context, users):
     mail = get_mail(config, context.workspace.owner_id)
     context.workspace.security = get_security_object(mail, users)
     workspace = api_workspace.update_workspace(
-                                                context.organization.id,
-                                                context.workspace.id,
-                                                context.workspace)
-    if workspace.security != context.workspace.security:
-        logger.warning('Workspace %s not updated because security ' +
-                       'already exists' % workspace.id)
+        context.organization.id,
+        context.workspace.id,
+        context.workspace)
+    updated = workspace.security == context.workspace.security
+    csv_writer.writerow(['workspace', workspace.id, workspace.owner_id,
+                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users)])
+    if not updated:
+        logger.warning('Workspace %s not updated because security already exists'
+                       % workspace.id)
 
 
 def update_scenario(config, context):
@@ -182,13 +194,16 @@ def update_scenario(config, context):
     mail = get_mail(config, context.scenario.owner_id)
     context.scenario.security = get_security_object(mail)
     scenario = api_scenario.update_scenario(
-                                            context.organization.id,
-                                            context.workspace.id,
-                                            context.scenario.id,
-                                            context.scenario)
-    if scenario.security != context.scenario.security:
-        logger.warning('Scenario %s not updated because security ' +
-                       'already exists' % scenario.id)
+        context.organization.id,
+        context.workspace.id,
+        context.scenario.id,
+        context.scenario)
+    updated = scenario.security == context.scenario.security
+    csv_writer.writerow(['scenario', scenario.id, scenario.owner_id,
+                         mail, ('EXIST', 'UPDATED')[updated], mail])
+    if not updated:
+        logger.warning('Scenario %s not updated because security already exists'
+                       % scenario.id)
 
 
 def get_security_object(mail, users=None):
@@ -199,12 +214,13 @@ def get_security_object(mail, users=None):
     if users is not None:
         users_set = set(users)
         for user in users_set:
-            security['accessControlList'].append(
+            if user != mail:
+                security['accessControlList'].append(
                     {
                         "id": user,
                         "role": "user"
                     }
-            )
+                )
     else:
         logger.warning("No users to add to security object")
 
@@ -271,12 +287,13 @@ def migrate():
         if 'organizationId' in config_file['options']:
             context = Context()
             get_organization_by_id(
-                                    config,
-                                    context,
-                                    config_file['options']['organizationId'])
+                config,
+                context,
+                config_file['options']['organizationId'])
             migrate_organization(config, context)
         else:
             migrate_organizations(config)
+    csv_file.close()
 
 
 @dataclass
