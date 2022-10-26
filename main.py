@@ -1,6 +1,6 @@
 # Copyright (c) Cosmo Tech.
 # Licensed under the MIT license.
-
+import csv
 import getpass
 import logging
 import sys
@@ -20,6 +20,11 @@ from cosmotech_api.api import workspace_api
 from cosmotech_api.model.organization import Organization
 from cosmotech_api.model.scenario import Scenario
 from cosmotech_api.model.workspace import Workspace
+
+csv_file = open('rbac_migration_report.csv', 'w', encoding='UTF8')
+header_csv = ['RESOURCE', 'ID', 'OWNER_ID', 'OWNER_MAIL', 'STATUS', 'USERS']
+csv_writer = csv.writer(csv_file)
+csv_writer.writerow(header_csv)
 
 logger = logging.getLogger()
 fileHandler = logging.FileHandler("application.log")
@@ -83,10 +88,24 @@ def migrate_organizations(config):
                      "organization_api->find_all_organizations: " + f"{e}")
 
 
+def get_organization_by_id(config, context, organization_id):
+    try:
+        api_organization = organization_api.OrganizationApi(config.api_client)
+        organization = api_organization.find_organization_by_id(
+            organization_id
+        )
+        context.organization = organization
+    except cosmotech_api.ApiException as e:
+        logger.error("Exception when calling " +
+                     "organization_api->find_organization_by_id: " + f"{e}")
+
+
 def migrate_organization(config, context):
     logger.info("Migrating organization: " + f"{context.organization.id} - " +
                 f"{context.organization.name}")
-    migrate_workspaces(config, context)
+    users = migrate_workspaces(config, context)
+    users.append(get_mail(config, context.organization.owner_id))
+    update_organization(config, context, users)
 
 
 def migrate_workspaces(config, context):
@@ -96,12 +115,12 @@ def migrate_workspaces(config, context):
         workspaces = api_workspace.find_all_workspaces(context.organization.id)
         if TRACE_DOCUMENTS:
             logger.debug(workspaces)
-        workspacesOwners = []
+        workspaces_owners = []
         for workspace in workspaces:
             context.workspace = workspace
-            workspaceOwners = migrate_workspace(config, context)
-            workspacesOwners.extend(workspaceOwners)
-        return workspacesOwners
+            workspace_owners = migrate_workspace(config, context)
+            workspaces_owners.extend(workspace_owners)
+        return workspaces_owners
     except cosmotech_api.ApiException as e:
         logger.error("Exception when calling " +
                      "workspace_api->find_all_workspaces: " + f"{e}")
@@ -110,8 +129,10 @@ def migrate_workspaces(config, context):
 def migrate_workspace(config, context):
     logger.info("Migrating workspace: " + f"{context.workspace.key} - " +
                 f"{context.workspace.id} - " + f"{context.workspace.name}")
-    owners = migrate_scenarios(config, context)
-    return owners
+    users = migrate_scenarios(config, context)
+    users.append(get_mail(config, context.workspace.owner_id))
+    update_workspace(config, context, users)
+    return users
 
 
 def migrate_scenarios(config, context):
@@ -122,20 +143,88 @@ def migrate_scenarios(config, context):
                                                     context.workspace.id)
         if TRACE_DOCUMENTS:
             logger.debug(scenarios)
-        scenariosOwners = []
+        scenarios_owners = []
         for scenario in scenarios:
             context.scenario = scenario
             logger.info("Scenario: " + f"{context.scenario.id} - " +
                         f"{context.scenario.name} - " +
                         f"{context.scenario.owner_id}")
-            get_mail(config, context.scenario.owner_id)
-            # Add user mail as admin if no admin yet
-            scenariosOwners.append(context.scenario.owner_id)
-        logger.info(f"Owners: {scenariosOwners}")
-        return scenariosOwners
+            update_scenario(config, context)
+            scenarios_owners.append(get_mail(config, context.scenario.owner_id))
+        logger.info(f"Owners: {scenarios_owners}")
+        return scenarios_owners
     except cosmotech_api.ApiException as e:
         logger.error("Exception when calling " +
                      "scenario_api->find_all_scenarios: " + f"{e}")
+
+
+def update_organization(config, context, users):
+    api_organization = organization_api.OrganizationApi(config.api_client)
+    mail = get_mail(config, context.organization.owner_id)
+    context.organization.security = get_security_object(mail, users)
+    organization = api_organization.update_organization(
+        context.organization.id,
+        context.organization)
+    updated = organization.security == context.organization.security
+    csv_writer.writerow(['organization', organization.id, organization.owner_id,
+                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users)])
+    if not updated:
+        logger.warning('Organization %s not updated because security already exists'
+                       % organization.id)
+
+
+def update_workspace(config, context, users):
+    api_workspace = workspace_api.WorkspaceApi(config.api_client)
+    mail = get_mail(config, context.workspace.owner_id)
+    context.workspace.security = get_security_object(mail, users)
+    workspace = api_workspace.update_workspace(
+        context.organization.id,
+        context.workspace.id,
+        context.workspace)
+    updated = workspace.security == context.workspace.security
+    csv_writer.writerow(['workspace', workspace.id, workspace.owner_id,
+                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users)])
+    if not updated:
+        logger.warning('Workspace %s not updated because security already exists'
+                       % workspace.id)
+
+
+def update_scenario(config, context):
+    api_scenario = scenario_api.ScenarioApi(config.api_client)
+    mail = get_mail(config, context.scenario.owner_id)
+    context.scenario.security = get_security_object(mail)
+    scenario = api_scenario.update_scenario(
+        context.organization.id,
+        context.workspace.id,
+        context.scenario.id,
+        context.scenario)
+    updated = scenario.security == context.scenario.security
+    csv_writer.writerow(['scenario', scenario.id, scenario.owner_id,
+                         mail, ('EXIST', 'UPDATED')[updated], mail])
+    if not updated:
+        logger.warning('Scenario %s not updated because security already exists'
+                       % scenario.id)
+
+
+def get_security_object(mail, users=None):
+    security = {
+        "default": "none",
+        "accessControlList": [{"id": mail, "role": "admin"}]
+    }
+    if users is not None:
+        users_set = set(users)
+        for user in users_set:
+            if user != mail:
+                security['accessControlList'].append(
+                    {
+                        "id": user,
+                        "role": "user"
+                    }
+                )
+    else:
+        logger.warning("No users to add to security object")
+
+    return security
 
 
 def get_mail(config, oid):
@@ -168,6 +257,7 @@ def get_mail(config, oid):
         logger.error(f"Bad mail info provided for {oid}")
     else:
         logger.info(f"{oid}: Returning mail {mail}")
+        return mail
 
 
 def get_config():
@@ -177,6 +267,8 @@ def get_config():
 
 def build_config(api_client, graph_client, config_file):
     mapping = {}
+    if 'mapping' not in config_file:
+        config_file['mapping'] = {}
     if config_file['mapping'] is not None:
         mapping = config_file['mapping']
     return Config(api_client=api_client,
@@ -192,7 +284,16 @@ def migrate():
     with get_apiclient(config_file) as api_client:
         graph_client = get_graphclient(config_file)
         config = build_config(api_client, graph_client, config_file)
-        migrate_organizations(config)
+        if 'organizationId' in config_file['options']:
+            context = Context()
+            get_organization_by_id(
+                config,
+                context,
+                config_file['options']['organizationId'])
+            migrate_organization(config, context)
+        else:
+            migrate_organizations(config)
+    csv_file.close()
 
 
 @dataclass

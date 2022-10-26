@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Intellij
+.idea
+config.yaml
+rbac_migration_report.csv
+application.log

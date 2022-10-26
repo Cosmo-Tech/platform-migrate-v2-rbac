@@ -1,0 +1,14 @@
+azure:
+  user: [USER]
+  tenant: [TENANT]
+platform:
+  url: [URL]
+  scope: [SCOPE]
+options:
+  fetch_from_azure_ad: true
+  fallback_admin: [FALLBACK_MAIL]
+#   Uncomment the line below and define it if you have to migrate only one organization with id
+#  organizationId: o-k0re8koklp4g
+#   Uncomment the mapping to define oid->mail mapping manually
+# mapping:
+#   [USER_OID]: "[MAPPED_USER_MAIL]"
