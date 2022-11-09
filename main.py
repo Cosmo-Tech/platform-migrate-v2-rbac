@@ -169,48 +169,60 @@ def update_organization(config, context, users):
     api_organization = organization_api.OrganizationApi(config.api_client)
     mail = get_mail(config, context.organization.owner_id)
     context.organization.security = get_security_object(mail, users)
-    organization = api_organization.update_organization(
-        context.organization.id,
-        context.organization)
-    updated = organization.security == context.organization.security
-    csv_writer.writerow(['organization', organization.id, organization.owner_id,
-                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users if users else [])])
-    if not updated:
-        logger.warning('Organization %s not updated because security already exists'
-                       % organization.id)
+    try:
+        organization = api_organization.update_organization(
+            context.organization.id,
+            context.organization)
+        updated = organization.security == context.organization.security
+        csv_writer.writerow(['organization', organization.id, organization.owner_id,
+                             mail, ('EXIST', 'UPDATED')[updated], ','.join(users if users else [])])
+        if not updated:
+            logger.warning('Organization %s not updated because security already exists'
+                           % organization.id)
+    except cosmotech_api.ApiException as e:
+        logger.error("Exception when calling " +
+                     "workspace_api->update_organization: " + f"{e}")
 
 
 def update_workspace(config, context, users):
     api_workspace = workspace_api.WorkspaceApi(config.api_client)
     mail = get_mail(config, context.workspace.owner_id)
     context.workspace.security = get_security_object(mail, users)
-    workspace = api_workspace.update_workspace(
-        context.organization.id,
-        context.workspace.id,
-        context.workspace)
-    updated = workspace.security == context.workspace.security
-    csv_writer.writerow(['workspace', workspace.id, workspace.owner_id,
-                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users if users else [])])
-    if not updated:
-        logger.warning('Workspace %s not updated because security already exists'
-                       % workspace.id)
+    try:
+        workspace = api_workspace.update_workspace(
+            context.organization.id,
+            context.workspace.id,
+            context.workspace)
+        updated = workspace.security == context.workspace.security
+        csv_writer.writerow(['workspace', workspace.id, workspace.owner_id,
+                             mail, ('EXIST', 'UPDATED')[updated], ','.join(users if users else [])])
+        if not updated:
+            logger.warning('Workspace %s not updated because security already exists'
+                           % workspace.id)
+    except cosmotech_api.ApiException as e:
+        logger.error("Exception when calling " +
+                     "workspace_api->update_workspace: " + f"{e}")
 
 
 def update_scenario(config, context):
     api_scenario = scenario_api.ScenarioApi(config.api_client)
     mail = get_mail(config, context.scenario.owner_id)
     context.scenario.security = get_security_object(mail)
-    scenario = api_scenario.update_scenario(
-        context.organization.id,
-        context.workspace.id,
-        context.scenario.id,
-        context.scenario)
-    updated = scenario.security == context.scenario.security
-    csv_writer.writerow(['scenario', scenario.id, scenario.owner_id,
-                         mail, ('EXIST', 'UPDATED')[updated], mail])
-    if not updated:
-        logger.warning('Scenario %s not updated because security already exists'
-                       % scenario.id)
+    try:
+        scenario = api_scenario.update_scenario(
+            context.organization.id,
+            context.workspace.id,
+            context.scenario.id,
+            context.scenario)
+        updated = scenario.security == context.scenario.security
+        csv_writer.writerow(['scenario', scenario.id, scenario.owner_id,
+                             mail, ('EXIST', 'UPDATED')[updated], mail])
+        if not updated:
+            logger.warning('Scenario %s not updated because security already exists'
+                           % scenario.id)
+    except cosmotech_api.ApiException as e:
+        logger.error("Exception when calling " +
+                     "workspace_api->update_scenario: " + f"{e}")
 
 
 def get_security_object(mail, users=None):
