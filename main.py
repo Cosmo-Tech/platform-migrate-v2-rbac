@@ -104,7 +104,10 @@ def migrate_organization(config, context):
     logger.info("Migrating organization: " + f"{context.organization.id} - " +
                 f"{context.organization.name}")
     users = migrate_workspaces(config, context)
-    users.append(get_mail(config, context.organization.owner_id))
+    if users:
+        users.append(get_mail(config, context.organization.owner_id))
+    else:
+        users = None
     update_organization(config, context, users)
 
 
@@ -115,12 +118,13 @@ def migrate_workspaces(config, context):
         workspaces = api_workspace.find_all_workspaces(context.organization.id)
         if TRACE_DOCUMENTS:
             logger.debug(workspaces)
-        workspaces_owners = []
+        users = []
         for workspace in workspaces:
             context.workspace = workspace
             workspace_owners = migrate_workspace(config, context)
-            workspaces_owners.extend(workspace_owners)
-        return workspaces_owners
+            if workspace_owners:
+                users.extend(workspace_owners)
+        return users
     except cosmotech_api.ApiException as e:
         logger.error("Exception when calling " +
                      "workspace_api->find_all_workspaces: " + f"{e}")
@@ -130,7 +134,10 @@ def migrate_workspace(config, context):
     logger.info("Migrating workspace: " + f"{context.workspace.key} - " +
                 f"{context.workspace.id} - " + f"{context.workspace.name}")
     users = migrate_scenarios(config, context)
-    users.append(get_mail(config, context.workspace.owner_id))
+    if users:
+        users.append(get_mail(config, context.workspace.owner_id))
+    else:
+        users = None
     update_workspace(config, context, users)
     return users
 
@@ -167,7 +174,7 @@ def update_organization(config, context, users):
         context.organization)
     updated = organization.security == context.organization.security
     csv_writer.writerow(['organization', organization.id, organization.owner_id,
-                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users)])
+                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users if users else [])])
     if not updated:
         logger.warning('Organization %s not updated because security already exists'
                        % organization.id)
@@ -183,7 +190,7 @@ def update_workspace(config, context, users):
         context.workspace)
     updated = workspace.security == context.workspace.security
     csv_writer.writerow(['workspace', workspace.id, workspace.owner_id,
-                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users)])
+                         mail, ('EXIST', 'UPDATED')[updated], ','.join(users if users else [])])
     if not updated:
         logger.warning('Workspace %s not updated because security already exists'
                        % workspace.id)
